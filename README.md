@@ -40,6 +40,43 @@ if (!joined) {
 auto result = std::move(joined).value();
 ```
 
+## Architecture & Ownership
+
+```mermaid
+sequenceDiagram
+    participant Caller
+    participant Spawn as spawn()
+    participant Task as AsyncTask<R>
+    participant State as TaskState<R>
+    participant Payload
+    participant Thread as pthread worker
+
+    Caller->>Spawn: pass noexcept callable F
+    Spawn->>State: allocate result storage
+    Spawn->>Payload: allocate callable + State pointer
+    Spawn->>Thread: pthread_create(thread_fn, Payload*)
+    Spawn-->>Caller: Result<AsyncTask<R>, int>
+    Note over Caller,Task: Caller owns AsyncTask<R>
+    Note over Task,State: AsyncTask owns TaskState<R>
+    Note over Thread,Payload: Worker owns Payload via unique_ptr
+    Thread->>Payload: run callable
+    Payload->>State: placement-new stores R
+    Thread-->>Thread: Payload destroyed at thread exit
+    Caller->>Task: join()
+    Task->>Thread: pthread_join()
+    Task->>State: move result out
+    Task-->>Caller: Result<R, int>
+    Note over Task,State: TaskState destroyed after result is consumed
+```
+
+Ownership rules:
+
+- `spawn()` allocates `TaskState<R>` and `Payload`. If allocation or `pthread_create` fails, it frees what it allocated and returns `Result::err(errno)`.
+- After `pthread_create` succeeds, the worker thread owns `Payload`; `thread_fn` wraps it in `std::unique_ptr` and destroys it when the task exits.
+- The returned `AsyncTask<R>` owns `TaskState<R>` and the joinable `pthread_t`.
+- `AsyncTask::join()` calls `pthread_join()`, moves the stored result out of `TaskState<R>`, destroys `TaskState<R>`, and returns `Result<R, int>`.
+- If an `AsyncTask<R>` is destroyed before `join()`, its destructor joins the thread and frees internal storage, but the task result is discarded.
+
 ```cpp
 // Result<T,E> — 错误通过返回值传递，不使用异常
 Result<int, std::string> safe_div(int a, int b) {
