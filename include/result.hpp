@@ -17,6 +17,8 @@ class [[nodiscard]] Result {
   static Result err(E e) { return Result(ErrTag{}, std::move(e)); }
 
   explicit operator bool() const noexcept { return data_.index() == 0; }
+  bool is_ok() const noexcept { return data_.index() == 0; }
+  bool is_err() const noexcept { return data_.index() == 1; }
 
   T& value() & { return std::get<0>(data_); }
   const T& value() const& { return std::get<0>(data_); }

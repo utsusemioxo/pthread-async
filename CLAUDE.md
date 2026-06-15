@@ -12,7 +12,7 @@ g++ -std=c++17 -lpthread -o main main.cpp
 Architecture
 include/
   result.hpp       # Result<T,E> — 基于 std::variant，无异常错误类型
-  async_task.hpp   # spawn() — pthread + std::promise/future
+  async_task.hpp   # spawn() — pthread + AsyncTask join handle
 src/
   main.cpp         # 示例与集成测试
 tests/
@@ -29,11 +29,11 @@ operator bool() 判断成功
 
 spawn(F func) — 用 pthread 启动异步任务：
 
-返回 Result<std::future<R>, int>（int 为 pthread errno）
+返回 Result<AsyncTask<R>, int>（int 为 pthread errno）
 
-内部用 unique_ptr 管理 Payload，防止内存泄漏
+内部用 unique_ptr 管理 Payload，用 TaskState 保存返回值
 
-线程 detach，生命周期自管理
+线程不 detach，由 AsyncTask::join() 调用 pthread_join 回收资源
 
 Key Constraints
 

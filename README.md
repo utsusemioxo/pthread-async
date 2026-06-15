@@ -26,13 +26,18 @@ cd build && ctest --output-on-failure
 ```cpp
 #include "async_task.hpp"
 
-// spawn 返回 Result<std::future<R>, int>
-auto r = spawn([] { return 42; });
+// spawn 返回 Result<AsyncTask<R>, int>
+auto r = spawn([]() noexcept { return Result<int, std::string>::ok(42); });
 if (!r) {
     std::cerr << "pthread_create failed: " << r.error() << "\n";
     return;
 }
-int result = r.value().get();   // 阻塞直到任务完成
+auto joined = r.value().join(); // pthread_join 后取任务结果
+if (!joined) {
+    std::cerr << "pthread_join failed: " << joined.error() << "\n";
+    return;
+}
+auto result = std::move(joined).value();
 ```
 
 ```cpp
